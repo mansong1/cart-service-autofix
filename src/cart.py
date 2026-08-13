@@ -59,7 +59,8 @@ def cart_total(items: list[LineItem], percent_off: float = 0.0) -> float:
     VAT is charged on the goods *and* the shipping, which is how the
     downstream tax service reconciles it.
     """
-    goods = apply_discount(subtotal(items), percent_off)
+    gross = subtotal(items)
+    goods = apply_discount(gross, percent_off)
     shipping = shipping_cost(goods)
-    taxable = goods + shipping
-    return round(taxable + vat(taxable), 2)
+    taxable = gross + shipping
+    return round(goods + shipping + vat(taxable), 2)
