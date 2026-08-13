@@ -26,13 +26,41 @@ python -m ruff check .          # lint
 
 Plus an unused `import os` that fails lint.
 
-The `CI_Auto_Fix` pipeline in project `Agent_DLC`:
+## Two pipelines
 
-1. **Build & Test** — installs deps, runs ruff and pytest. Fails on `main`.
-2. **Auto Fix** — the `ci_autofix_agent` worker agent reads the failing output,
-   diagnoses each root cause, patches `src/cart.py`, and re-runs the suite until green.
-3. **Verify** — an independent clean run of lint + tests over the agent's patch.
-4. **Open PR** — the fix is pushed to a branch and raised as a pull request for human review.
+The demo deliberately uses **two separate pipelines** in project `Agent_DLC`, because
+that is how this works in real life: your build pipeline has no idea an agent exists.
 
-The agent is scoped to `src/**` only. It may never edit `tests/**` — the fix has to
-be a real fix, not a rewritten assertion.
+### 1. `cart_service_ci` — the build that breaks
+
+An ordinary CI pipeline. Installs deps, runs ruff, runs pytest. It fails on `main`
+with 8 failed / 8 passed and 2 lint errors. There is **no auto-fix wiring in it at
+all** — no failure-log staging, no exit-code massaging, nothing added for the agent's
+benefit. You could point the auto-fix pipeline at any failing build.
+
+### 2. `CI_Auto_Fix` — the repair
+
+Takes the failed execution as input (or finds the most recent failure itself):
+
+1. **Snapshot Baseline** — checksums `tests/` and the build config so tampering can
+   be proven either way. Deliberately does *not* run the suite.
+2. **Auto Fix Agent** — `ci_autofix_agent` calls `harness_diagnose` and
+   `harness_get resource_type=execution_log` over the Harness MCP server to pull the
+   *upstream* run's real console output, diagnoses each root cause, and patches
+   `src/cart.py`.
+3. **Verify Fix** — independent clean run of lint + tests over the agent's patch,
+   plus a checksum tamper check against the baseline.
+4. **Raise Fix PR** — pushes the patch to `ci-autofix/build-<n>` and opens a PR on
+   GitHub, using the agent's own fix report as the PR body.
+5. **Fix Gate** — fails the run unless the patch verified *and* a PR exists.
+
+## Guardrails
+
+- The agent may edit `src/**` only. It may never edit `tests/**`, `pyproject.toml`,
+  `requirements.txt`, or any pipeline YAML — the fix has to be a real fix, not a
+  rewritten assertion. Verification re-checks this with checksums.
+- The agent's MCP access is read-only by instruction: it reads build state, and does
+  not re-run pipelines, edit entities, commit, or open PRs.
+- Commit and PR mechanics are a plain script, not an agent — so the write-scoped
+  GitHub token never enters an LLM's context, and only paths under `src/` are staged.
+- Nothing is ever auto-merged. Human review is always required.
