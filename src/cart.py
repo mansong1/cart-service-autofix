@@ -3,11 +3,9 @@
 Pure functions only -- no I/O -- so the unit tests are fast and deterministic.
 """
 
-import os
-
 from dataclasses import dataclass
 
-VAT_RATE = 0.175
+VAT_RATE = 0.20
 FREE_SHIPPING_THRESHOLD = 50.00
 SHIPPING_FLAT_RATE = 4.99
 
@@ -36,14 +34,13 @@ def apply_discount(amount: float, percent_off: float) -> float:
     clamped to the 0-100 range so a bad coupon can never produce a negative
     or inflated total.
     """
-    if percent_off < 0:
-        percent_off = 0.0
-    return amount - (amount * percent_off)
+    clamped = max(0.0, min(percent_off, 100.0))
+    return amount * (1 - clamped / 100.0)
 
 
 def shipping_cost(discounted_subtotal: float) -> float:
     """Flat-rate shipping, free once the threshold is reached."""
-    if discounted_subtotal > FREE_SHIPPING_THRESHOLD:
+    if discounted_subtotal >= FREE_SHIPPING_THRESHOLD:
         return 0.0
     return SHIPPING_FLAT_RATE
 
